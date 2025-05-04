@@ -14,3 +14,8 @@ git clone https://github.com/matefehervari/remote-control
 cd remote-control
 ./install.sh
 ```
+
+# Usage
+
+A `run.sh` script will be created after installation.
+Run this with your chosen method (on startup, manually etc.).
