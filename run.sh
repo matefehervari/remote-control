@@ -1,1 +1,2 @@
-cd /home/mate/projects/remote-control && source ./.venv/bin/activate && ./remote_control.py
+DIR=$(dirname "${BASH_SOURCE[0]}")
+cd $DIR && source ./.venv/bin/activate && ./remote_control.py
