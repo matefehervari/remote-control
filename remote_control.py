@@ -1,22 +1,24 @@
 #!/bin/env python3
-import os
-import sys
-import signal
 import base64
-import threading
 import logging
+import os
+import signal
+import subprocess
+import sys
+import threading
 import traceback
-from types import SimpleNamespace
-from typing import Callable
 import webbrowser
+from dataclasses import asdict, dataclass
 from io import BytesIO
 from time import sleep
-from dataclasses import asdict, dataclass
-from flask import Flask, request, jsonify 
+from types import SimpleNamespace
+from typing import Callable
+
+from dotenv import load_dotenv
+from flask import Flask, abort, jsonify, request
 from flask_cors import CORS
 from PIL import Image
 from werkzeug.serving import make_server
-from dotenv import load_dotenv
 
 from capturing import Capturing
 
@@ -24,13 +26,40 @@ platform = os.name
 
 if platform == "nt":
     import win32clipboard as clp
+    import keyboard
+
+    def stop_start():
+        keyboard.send("play/pause media")
 else:
     clp = SimpleNamespace()
+
+    def stop_start():
+        subprocess.run(["playerctl", "play-pause"])
+
 
 load_dotenv()
 
 HOST = os.getenv("RC_HOST")
 PORT = os.getenv("RC_PORT")
+API_KEY = os.getenv("API_KEY")
+
+if HOST is None:
+    sys.stderr.write("No HOST address found in .env")
+    exit(1)
+
+if PORT is None:
+    sys.stderr.write("No PORT address found in .env")
+    exit(1)
+
+if API_KEY is None:
+    sys.stderr.write("No API key found in .env")
+    exit(1)
+
+if not PORT.isnumeric():
+    sys.stderr.write(f"Invalid PORT {PORT} given in .env")
+    exit(1)
+
+PORT = int(PORT)
 
 
 @dataclass
@@ -41,7 +70,9 @@ class Request:
     def __str__(self):
         return str(asdict(self))
 
+
 if platform == "nt":
+
     def copy_image_to_clipboard(image: Image.Image):
         output = BytesIO()
         image.convert("RGB").save(output, "BMP")
@@ -52,6 +83,7 @@ if platform == "nt":
         clp.EmptyClipboard()
         clp.SetClipboardData(clp.CF_DIB, data)
         clp.CloseClipboard()
+
 
 class CustomLogHandler(logging.Handler):
     def __init__(self, log_callback):
@@ -64,7 +96,7 @@ class CustomLogHandler(logging.Handler):
 
 
 class RemoteControlThread(threading.Thread):
-    def __init__(self, host=HOST, port=PORT, log: Callable[..., None]=print):
+    def __init__(self, host=HOST, port=PORT, log: Callable[..., None] = print):
         threading.Thread.__init__(self)
         self.daemon = True  # Thread will shut down with main program
         self.log = log
@@ -83,24 +115,31 @@ class RemoteControlThread(threading.Thread):
         # Lower Flask's built-in logging level
         self.app.logger.setLevel(logging.INFO)
 
-        self.server = make_server(host, port, self.app)
+        ssl_context = ("certs/server.crt", "certs/server.key")
+        self.server = make_server(host, port, self.app, ssl_context=ssl_context)
         self.ctx = self.app.app_context()
 
-
     def setup_routes(self):
+        @self.app.before_request
+        def check_api_key():
+            if request.endpoint != "health_check":
+                key = request.headers.get("X-API-Key")
+                if key != API_KEY:
+                    self.log("[Auth] Received unauthorised request")
+                    abort(401)
+
         @self.app.route("/", methods=["POST"])
         def handle_request():
-            print("test")
             try:
                 json = request.get_json()
                 req = Request(**json)
-                
+
                 if req.payload.startswith("data:image/png;base64,"):
-                    self.log("Detected base64 PNG. Copying to clipboard...")
+                    self.log("[Request] Detected base64 PNG. Copying to clipboard...")
                     base64_data = req.payload.split(",", 1)[1]
                     image_data = base64.b64decode(base64_data)
                     image = Image.open(BytesIO(image_data))
-                    
+
                     if platform == "nt":
                         copy_image_to_clipboard(image)
                         return jsonify({"status": "image copied to clipboard"}), 200
@@ -110,14 +149,21 @@ class RemoteControlThread(threading.Thread):
                 match req.action:
                     case "open-browser":
                         webbrowser.open_new_tab(req.payload)
-                        self.log(f"Processed action: {req.action} to URL {req.payload}")
+                        self.log(
+                            f"[Request] Processed action: {req.action} to URL {req.payload}"
+                        )
                         return jsonify({"status": "browser opened"}), 200
 
                 return jsonify({"error": "unkown action"}), 400
             except Exception as e:
-                self.log("Error: ", e)
+                self.log("[Error]", e)
                 return jsonify({"error": str(e)}), 500
 
+        @self.app.route("/stop_start", methods=["POST"])
+        def handle_stop_start():
+            self.log("[Request] Stop-Start received")
+            stop_start()
+            return jsonify({"status": "stop_start executed"}), 200
 
     def run(self):
         try:
@@ -129,12 +175,13 @@ class RemoteControlThread(threading.Thread):
                 self.log(line)
             self.server.serve_forever()
         except Exception as e:
-            self.log("[Error] ", traceback.format_exception(type(e), e, e.__traceback__))
+            self.log(
+                "[Error] ", traceback.format_exception(type(e), e, e.__traceback__)
+            )
 
     def shutdown(self):
         self.log("Flask server stopping...")
         self.server.shutdown()
-
 
 
 def main():
@@ -156,5 +203,5 @@ def main():
         signal_handler(signal.SIGINT, None)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
