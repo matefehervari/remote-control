@@ -30,11 +30,17 @@ if platform == "nt":
 
     def stop_start():
         keyboard.send("play/pause media")
+
 else:
     clp = SimpleNamespace()
 
     def stop_start():
         subprocess.run(["playerctl", "play-pause"])
+
+    def suspend():
+        subprocess.run(
+            ["bash", "-c", "echo mem | sudo tee /sys/power/state 1>/dev/null"]
+        )
 
 
 load_dotenv()
@@ -165,6 +171,13 @@ class RemoteControlThread(threading.Thread):
             stop_start()
             return jsonify({"status": "stop_start executed"}), 200
 
+        @self.app.route("/suspend", methods=["POST"])
+        def handle_suspend():
+            self.log("[Request] Suspend received")
+
+            delay_thread_start(1, suspend)
+            return jsonify({"status": "suspend executed"}), 200
+
     def run(self):
         try:
             self.log("Flask server starting...")
@@ -182,6 +195,14 @@ class RemoteControlThread(threading.Thread):
     def shutdown(self):
         self.log("Flask server stopping...")
         self.server.shutdown()
+
+
+def delay_thread_start(delay, target):
+    def wrapper():
+        sleep(delay)
+        target()
+
+    threading.Thread(target=wrapper).start()
 
 
 def main():
