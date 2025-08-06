@@ -27,9 +27,13 @@ platform = os.name
 if platform == "nt":
     import win32clipboard as clp
     import keyboard
+    import ctypes
 
     def stop_start():
         keyboard.send("play/pause media")
+
+    def suspend():
+        ctypes.windll.powrprof.SetSuspendState(False, True, False)
 
 else:
     clp = SimpleNamespace()
