@@ -46,6 +46,9 @@ else:
             ["bash", "-c", "echo mem | sudo tee /sys/power/state 1>/dev/null"]
         )
 
+    def shutdown():
+        subprocess.run(["poweroff"])
+
 
 load_dotenv()
 
@@ -180,6 +183,13 @@ class RemoteControlThread(threading.Thread):
             self.log("[Request] Suspend received")
 
             delay_thread_start(1, suspend)
+            return jsonify({"status": "suspend executed"}), 200
+
+        @self.app.route("/shutdown", methods=["POST"])
+        def handle_shutdown():
+            self.log("[Request] Shutdown received")
+
+            delay_thread_start(1, shutdown)
             return jsonify({"status": "suspend executed"}), 200
 
     def run(self):
