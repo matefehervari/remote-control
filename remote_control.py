@@ -35,6 +35,9 @@ if platform == "nt":
     def suspend():
         ctypes.windll.powrprof.SetSuspendState(False, True, False)
 
+    def shutdown():
+        subprocess.run(["shutdown", "/s", "/t", "0", "/f"])
+
 else:
     clp = SimpleNamespace()
 

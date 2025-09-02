@@ -5,3 +5,4 @@ __pycache__
 *.crt
 *.key
 certs/openssl.cnf
+*.bat
