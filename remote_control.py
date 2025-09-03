@@ -1,5 +1,6 @@
 #!/bin/env python3
 import base64
+from pathlib import Path
 import logging
 import os
 import signal
@@ -53,7 +54,8 @@ else:
         subprocess.run(["poweroff"])
 
 
-load_dotenv()
+project_dir = Path(__file__).resolve().parent
+load_dotenv(project_dir / ".env")
 
 HOST = os.getenv("RC_HOST")
 PORT = os.getenv("RC_PORT")

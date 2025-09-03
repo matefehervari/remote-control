@@ -1,2 +1,1 @@
-DIR=$(dirname "${BASH_SOURCE[0]}")
-cd $DIR && source ./.venv/bin/activate && ./remote_control.py
+cd /home/mate/projects/remote-control && poetry run python ./remote_control.py
